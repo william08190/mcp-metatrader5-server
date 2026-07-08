@@ -105,7 +105,8 @@ The AI will:
 
 ## Important Notes
 
-- **Always initialize MT5** before using any other tools
+- **Keep the MT5 terminal running** on the server host; tools auto-initialize or
+  reattach before use
 - **Login is required** to access account-specific data and place trades
 - **Use `shutdown()`** when done to properly close the connection
 - **Check order results** for success/failure before proceeding
