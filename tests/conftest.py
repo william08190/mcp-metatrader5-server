@@ -6,6 +6,15 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def disable_auto_initialize_for_unit_tests(monkeypatch, request):
+    """Keep unit tests from opening a real MT5 connection unless requested."""
+    if request.node.get_closest_marker("auto_initialize"):
+        return
+
+    monkeypatch.setattr("mcp_mt5.main._ensure_initialized", lambda: None, raising=False)
+
+
 @pytest.fixture
 def mock_mt5(monkeypatch):
     """Mock MetaTrader5 module for unit tests."""

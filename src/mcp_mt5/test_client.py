@@ -16,35 +16,35 @@ dotenv.load_dotenv()
 # Configure the MCP server URL
 MCP_SERVER_URL = "http://localhost:8000/mcp"
 
-# MT5 Configuration - Update these with your details if auto-detection fails
-MT5_PATH = os.getenv("MT5_PATH") or ""
+# MT5 Configuration - update account details if the terminal is not already logged in.
+# Set MT5_PATH or MT5_TERMINAL_PATH in the server environment if auto-detection fails.
 MT5_LOGIN = int(os.getenv("MT5_LOGIN") or 123456)  # Your MT5 account number
 MT5_PASSWORD = os.getenv("MT5_PASSWORD") or "your_password"  # Your MT5 password
 MT5_SERVER = os.getenv("MT5_SERVER") or "YourBroker-Demo"  # Your broker server name
 
 
 async def example_1_connection():
-    """Example 1: Initialize and connect to MT5"""
+    """Example 1: Reconnect and get account information"""
     print("\n" + "=" * 60)
-    print("Example 1: Initialize and Connect to MT5")
+    print("Example 1: Reconnect and Get Account Info")
     print("=" * 60)
 
     async with Client(MCP_SERVER_URL) as client:
-        # Initialize MT5
-        print(f"Initializing MT5 at: {MT5_PATH or '<auto-detect>'}")
-        result = await client.call_tool("initialize", {"path": MT5_PATH})
+        # Optional explicit reconnect. Ordinary tools also auto-initialize.
+        print("Reconnecting to MT5 using server-side configuration")
+        result = await client.call_tool("reconnect", {})
 
         # Check if initialization succeeded
         init_success = result.data if hasattr(result, "data") else False
         if not init_success:
-            print("❌ MT5 initialization failed!")
+            print("❌ MT5 reconnect failed!")
             print("   Make sure:")
             print("   1. MetaTrader 5 terminal is running")
-            print("   2. Path is correct")
+            print("   2. MT5_PATH/MT5_TERMINAL_PATH is set in the server environment if needed")
             print("   3. MT5 terminal allows API access")
             return
 
-        print("✓ Initialize result: Success")
+        print("✓ Reconnect result: Success")
 
         # Login to account
         print(f"\nLogging in to account: {MT5_LOGIN}")
@@ -94,8 +94,7 @@ async def example_2_market_data():
     print("=" * 60)
 
     async with Client(MCP_SERVER_URL) as client:
-        # Initialize and login
-        await client.call_tool("initialize", {"path": MT5_PATH})
+        # Optional login; market-data tools will auto-initialize first.
         await client.call_tool(
             "login", {"login": MT5_LOGIN, "password": MT5_PASSWORD, "server": MT5_SERVER}
         )

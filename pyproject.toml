@@ -68,6 +68,7 @@ markers = [
     "unit: Unit tests that don't require MT5",
     "integration: Integration tests that require MT5 connection",
     "slow: Slow running tests",
+    "auto_initialize: Tests that exercise MT5 auto-initialization logic",
 ]
 asyncio_mode = "auto"
 

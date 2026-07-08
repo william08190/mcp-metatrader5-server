@@ -4,22 +4,16 @@ Complete reference for all tools, resources, and models provided by the MetaTrad
 
 ## Connection Management Tools
 
-### `initialize(path: str) -> bool`
+### `reconnect() -> bool`
 
-Initialize the MetaTrader 5 terminal.
+Optional manual reconnect helper for the MetaTrader 5 terminal.
 
-**Parameters:**
-- `path` (str): MT5 terminal path. Use `""` first to let MetaTrader5 auto-detect
-  or attach to the installed/running terminal. Pass a full `terminal64.exe` path
-  only if auto-detection fails.
+Most tools auto-initialize or reattach to MT5 before use. Prefer configuring
+`MT5_PATH` or `MT5_TERMINAL_PATH` in the MCP server environment instead of
+passing a terminal path through a tool call.
 
 **Returns:**
-- `bool`: True if initialization was successful, False otherwise
-
-**Example:**
-```python
-initialize(path="")
-```
+- `bool`: True if reconnection was successful, False otherwise
 
 ---
 

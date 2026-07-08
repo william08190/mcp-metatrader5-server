@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 from typing import Any
 
@@ -14,33 +15,72 @@ mcp = FastMCP(
     instructions="""
     This server controls the MetaTrader 5 terminal via its Python API.
 
-    IMPORTANT - REQUIRED SETUP SEQUENCE:
-    Before calling ANY other tool, you MUST call initialize() first to establish
-    the connection to the MT5 terminal. Without this, all other tools will fail
-    with a 'No IPC connection' error.
+    Connection handling:
+    - Tools automatically initialize or reattach to the configured MT5 terminal
+      before accessing account, market, order, or history data.
+    - Do not call a separate initialization tool as a routine first step. The
+      optional reconnect() tool is only for users who explicitly ask for a
+      reconnect.
+    - If a custom terminal location is required, configure MT5_PATH or
+      MT5_TERMINAL_PATH in the MCP server environment instead of passing a path
+      through a tool call.
 
     Typical usage sequence:
-    1. initialize(path="")
-       - Must be called first, every time the server starts
-       - Use an empty string first. This lets MetaTrader5 auto-detect or attach
-         to the installed/running terminal and is the preferred default.
-       - Only pass an explicit terminal64.exe path if auto-detection fails.
+    1. Call the tool that matches the user's request directly:
+       get_account_info(), get_symbol_info_tick(), order_check(), order_send(),
+       close_position(), etc.
     2. login(login=..., password=..., server=...) [optional]
        - Only needed if the terminal is not already logged in
-    3. Now you can call any other tools: get_account_info(), order_send(), etc.
-
-    Fallback MT5 terminal paths:
-    - "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
-    - "C:\\Program Files (x86)\\MetaTrader 5\\terminal64.exe"
-
-    If initialize(path="") fails, ask the user:
-    "Where is your MetaTrader 5 terminal installed? Please provide the full path
-    to terminal64.exe (e.g. C:\\Program Files\\MetaTrader 5\\terminal64.exe)"
 
     All action and type fields require INTEGER constants, not strings.
     Volume is always in LOTS (e.g. 0.01, 0.1, 1.0).
     """,
 )
+
+
+_MT5_PATH_ENV_VARS = ("MT5_PATH", "MT5_TERMINAL_PATH")
+
+
+def _get_default_mt5_path() -> str:
+    """Return the server-side MT5 path configured for auto-initialization."""
+    for env_var in _MT5_PATH_ENV_VARS:
+        value = os.getenv(env_var)
+        if value is not None:
+            return value
+    return ""
+
+
+def _initialize_mt5(path: str | None = None) -> bool:
+    """Initialize MT5 using a server-side path, defaulting to auto-detection."""
+    init_path = _get_default_mt5_path() if path is None else path
+    if mt5.initialize(path=init_path):
+        logger.info("MT5 initialized successfully")
+        return True
+
+    logger.error(f"MT5 initialization failed, error code: {mt5.last_error()}")
+    return False
+
+
+def _ensure_initialized() -> None:
+    """
+    Lazily initialize or reattach to MT5 before tool operations.
+
+    This keeps MCP clients from having to call initialize(path=...) explicitly,
+    which is especially useful for hosted clients that may block path arguments.
+    """
+    terminal_info = mt5.terminal_info()
+    if terminal_info is not None:
+        return
+
+    if _initialize_mt5():
+        return
+
+    error_code, error_msg = mt5.last_error()
+    raise ValueError(
+        f"MT5 auto-initialization failed. Error: {error_code} - {error_msg}. "
+        "Start the MT5 terminal on the server host and, if auto-detection is not enough, "
+        "set MT5_PATH or MT5_TERMINAL_PATH in the MCP server environment."
+    )
 
 
 # Models for request/response data
@@ -453,7 +493,7 @@ def _send_order_request(request_dict: dict[str, Any]) -> OrderResult:
             f"Failed to send order. MT5 Error {error_code}: {error_msg}\n"
             f"Request: {request_dict}\n"
             f"Common causes:\n"
-            f"- MT5 not initialized: Call initialize() first\n"
+            f"- MT5 terminal is not running or cannot be auto-initialized\n"
             f"- Invalid symbol: Check symbol name and ensure it's selected\n"
             f"- Invalid price: Ensure price is current (use get_symbol_info_tick)\n"
             f"- Insufficient margin: Check account balance\n"
@@ -592,37 +632,41 @@ def get_timeframe_constant(timeframe: int) -> int:
     return timeframe_map[timeframe]
 
 
-# Initialize MetaTrader 5 connection
-@mcp.tool()
+# Initialize MetaTrader 5 connection for direct Python compatibility.
 def initialize(path: str = "") -> bool:
     """
     Initialize the MetaTrader 5 terminal.
 
-    This MUST be called first before using any other MT5 tools.
-    Establishes connection to the MT5 terminal application.
+    Optional compatibility/reconnect helper.
+
+    Most tools auto-initialize the MT5 terminal before use, so routine clients
+    should call account, market-data, order, or history tools directly. Prefer
+    configuring MT5_PATH or MT5_TERMINAL_PATH in the MCP server environment
+    instead of passing a terminal path through this tool.
 
     Args:
-        path: MT5 terminal path. Pass an empty string first to let MetaTrader5
-              auto-detect or attach to the installed/running terminal. Only use
-              an explicit terminal64.exe path if auto-detection fails.
-              Fallback paths:
-              - "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
-              - "C:\\Program Files (x86)\\MetaTrader 5\\terminal64.exe"
+        path: Optional MT5 terminal path. Leave empty to let MetaTrader5
+              auto-detect or attach to the installed/running terminal.
 
     Returns:
         bool: True if initialization was successful, False otherwise.
-
-    Example:
-        # Initialize MT5 connection first
-        initialize(path="")
-        # Now you can use other tools like get_account_info(), symbol_select(), etc.
     """
-    if not mt5.initialize(path=path):
-        logger.error(f"MT5 initialization failed, error code: {mt5.last_error()}")
-        return False
+    return _initialize_mt5(path=path)
 
-    logger.info("MT5 initialized successfully")
-    return True
+
+@mcp.tool()
+def reconnect() -> bool:
+    """
+    Reconnect to the MetaTrader 5 terminal using server-side configuration.
+
+    This optional helper has no path argument. Routine clients should call
+    account, market-data, order, or history tools directly; those tools
+    auto-initialize before use.
+
+    Returns:
+        bool: True if reconnection was successful, False otherwise.
+    """
+    return _initialize_mt5()
 
 
 # Shutdown MetaTrader 5 connection
@@ -645,8 +689,8 @@ def login(login: int, password: str, server: str) -> bool:
     """
     Log in to the MetaTrader 5 trading account.
 
-    Call this AFTER initialize() if you need to switch accounts or login programmatically.
-    Not required if MT5 terminal is already logged in to an account.
+    Not required if MT5 terminal is already logged in to an account. The server
+    auto-initializes MT5 before attempting the login.
 
     Args:
         login: Trading account number (integer, e.g., 12345678)
@@ -656,13 +700,8 @@ def login(login: int, password: str, server: str) -> bool:
     Returns:
         bool: True if login was successful, False otherwise.
 
-    Example:
-        # First initialize MT5
-        initialize(path="")
-        # Then login to your account
-        login(login=12345678, password="yourpassword", server="Demo-Server")
-        # Now you can use get_account_info(), place trades, etc.
     """
+    _ensure_initialized()
     if not mt5.login(login=login, password=password, server=server):
         logger.error(f"MT5 login failed, error code: {mt5.last_error()}")
         return False
@@ -677,11 +716,10 @@ def get_account_info() -> AccountInfo:
     """
     Get information about the current trading account.
 
-    Important: Requires MT5 to be initialized and logged in.
+    Important: The server auto-initializes MT5 before this call.
     If this fails, ensure you have:
-    1. Called initialize() first
-    2. Logged in using login() if using a demo/live account
-    3. Have an active connection to the terminal
+    1. Logged in using login() if using a demo/live account
+    2. Have an active connection to the terminal
 
     Returns:
         AccountInfo: Information about the trading account including balance, equity,
@@ -689,10 +727,11 @@ def get_account_info() -> AccountInfo:
 
     Raises:
         ValueError: If account info cannot be retrieved. Common causes:
-            - MT5 not initialized: Call initialize() first
+            - MT5 terminal is not running or cannot be auto-initialized
             - Not logged in: Call login() with your credentials
             - Terminal not connected: Check MT5 connection status
     """
+    _ensure_initialized()
     account_info = mt5.account_info()
     if account_info is None:
         error_code, error_msg = mt5.last_error()
@@ -700,7 +739,7 @@ def get_account_info() -> AccountInfo:
         raise ValueError(
             f"Failed to get account info. Error: {error_code} - {error_msg}. "
             f"Possible causes:\n"
-            f"1. MT5 not initialized - Call initialize() first\n"
+            f"1. MT5 terminal is not running or cannot be auto-initialized\n"
             f"2. Not logged in - Call login() with your credentials\n"
             f"3. Terminal not connected - Check MT5 terminal status\n"
             f"4. No active trading account - Ensure an account is configured in MT5"
@@ -720,6 +759,7 @@ def get_terminal_info() -> dict[str, Any]:
     Returns:
         Dict[str, Any]: Information about the terminal.
     """
+    _ensure_initialized()
     terminal_info = mt5.terminal_info()
     if terminal_info is None:
         logger.error(f"Failed to get terminal info, error code: {mt5.last_error()}")
@@ -738,6 +778,7 @@ def get_version() -> dict[str, Any]:
     Returns:
         Dict[str, Any]: Version information.
     """
+    _ensure_initialized()
     version = mt5.version()
     if version is None:
         logger.error(f"Failed to get version, error code: {mt5.last_error()}")
@@ -755,6 +796,7 @@ def get_symbols() -> list[str]:
     Returns:
         List[str]: List of symbol names.
     """
+    _ensure_initialized()
     symbols = mt5.symbols_get()
     if symbols is None:
         logger.error(f"Failed to get symbols, error code: {mt5.last_error()}")
@@ -775,6 +817,7 @@ def get_symbols_by_group(group: str) -> list[str]:
     Returns:
         List[str]: List of symbol names that match the group.
     """
+    _ensure_initialized()
     symbols = mt5.symbols_get(group=group)
     if symbols is None:
         logger.error(f"Failed to get symbols for group {group}, error code: {mt5.last_error()}")
@@ -795,6 +838,7 @@ def get_symbol_info(symbol: str) -> SymbolInfo:
     Returns:
         SymbolInfo: Information about the symbol.
     """
+    _ensure_initialized()
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:
         logger.error(f"Failed to get info for symbol {symbol}, error code: {mt5.last_error()}")
@@ -824,6 +868,7 @@ def get_symbol_info_tick(symbol: str) -> dict[str, Any]:
         ValueError: If the symbol is not found or not selected in Market Watch.
             Try calling symbol_select(symbol="{symbol}", visible=True) first.
     """
+    _ensure_initialized()
     tick = mt5.symbol_info_tick(symbol)
     if tick is None:
         error_code, error_msg = mt5.last_error()
@@ -863,6 +908,7 @@ def symbol_select(symbol: str, visible: bool = True) -> bool:
         symbol_select(symbol="XAUUSD", visible=True)
         tick = get_symbol_info_tick(symbol="XAUUSD")
     """
+    _ensure_initialized()
     result = mt5.symbol_select(symbol, visible)
     if not result:
         logger.error(f"Failed to select symbol {symbol}, error code: {mt5.last_error()}")
@@ -900,6 +946,7 @@ def copy_rates_from_pos(
     Returns:
         List[Dict[str, Any]]: List of bars with time, open, high, low, close, tick_volume, spread, and real_volume.
     """
+    _ensure_initialized()
     rates = mt5.copy_rates_from_pos(symbol, get_timeframe_constant(timeframe), start_pos, count)
     if rates is None:
         logger.error(f"Failed to copy rates for {symbol}, error code: {mt5.last_error()}")
@@ -930,6 +977,7 @@ def copy_rates_from_date(
     Returns:
         List[Dict[str, Any]]: List of bars with time, open, high, low, close, tick_volume, spread, and real_volume.
     """
+    _ensure_initialized()
     rates = mt5.copy_rates_from_date(symbol, get_timeframe_constant(timeframe), date_from, count)
     if rates is None:
         logger.error(
@@ -962,6 +1010,7 @@ def copy_rates_range(
     Returns:
         List[Dict[str, Any]]: List of bars with time, open, high, low, close, tick_volume, spread, and real_volume.
     """
+    _ensure_initialized()
     rates = mt5.copy_rates_range(symbol, get_timeframe_constant(timeframe), date_from, date_to)
     if rates is None:
         logger.error(
@@ -997,6 +1046,7 @@ def copy_ticks_from_pos(
     Returns:
         List[Dict[str, Any]]: List of ticks.
     """
+    _ensure_initialized()
     ticks = mt5.copy_ticks_from(symbol, start_time, count, flags)
     if ticks is None:
         logger.error(f"Failed to copy ticks for {symbol}, error code: {mt5.last_error()}")
@@ -1027,6 +1077,7 @@ def copy_ticks_from_date(
     Returns:
         List[Dict[str, Any]]: List of ticks.
     """
+    _ensure_initialized()
     ticks = mt5.copy_ticks_from(symbol, date_from, count, flags)
     if ticks is None:
         logger.error(
@@ -1059,6 +1110,7 @@ def copy_ticks_range(
     Returns:
         List[Dict[str, Any]]: List of ticks.
     """
+    _ensure_initialized()
     ticks = mt5.copy_ticks_range(symbol, date_from, date_to, flags)
     if ticks is None:
         logger.error(
@@ -1245,6 +1297,8 @@ def order_send(request: OrderRequest) -> OrderResult:
         }
 
     """
+    _ensure_initialized()
+
     # Convert request to dictionary and exclude None values
     # MT5 doesn't accept None for optional parameters - they must be omitted entirely
     request_dict = request.model_dump(exclude_none=True)
@@ -1291,6 +1345,8 @@ def order_check(request: OrderRequest) -> dict[str, Any]:
             # OK to send the order
             order_send(request={...})
     """
+    _ensure_initialized()
+
     # Convert request to dictionary and exclude None values
     # MT5 doesn't accept None for optional parameters - they must be omitted entirely
     request_dict = request.model_dump(exclude_none=True)
@@ -1307,7 +1363,7 @@ def order_check(request: OrderRequest) -> dict[str, Any]:
             f"Failed to check order. MT5 Error {error_code}: {error_msg}\n"
             f"Request: {request_dict}\n"
             f"Common causes:\n"
-            f"- MT5 not initialized: Call initialize() first\n"
+            f"- MT5 terminal is not running or cannot be auto-initialized\n"
             f"- Invalid parameters: Check symbol, volume, price, etc."
         )
 
@@ -1334,6 +1390,8 @@ def positions_get(symbol: str | None = None, group: str | None = None) -> list[P
     Returns:
         List[Position]: List of open positions.
     """
+    _ensure_initialized()
+
     if symbol is not None:
         positions = mt5.positions_get(symbol=symbol)
     elif group is not None:
@@ -1366,6 +1424,7 @@ def positions_get_by_ticket(ticket: int) -> Position | None:
     Returns:
         Optional[Position]: Position information or None if not found.
     """
+    _ensure_initialized()
     position = mt5.positions_get(ticket=ticket)
     if position is None or len(position) == 0:
         logger.error(f"Failed to get position with ticket {ticket}, error code: {mt5.last_error()}")
@@ -1463,6 +1522,8 @@ def orders_get(symbol: str | None = None, group: str | None = None) -> list[dict
     Returns:
         List[Dict[str, Any]]: List of active orders.
     """
+    _ensure_initialized()
+
     if symbol is not None:
         orders = mt5.orders_get(symbol=symbol)
     elif group is not None:
@@ -1495,6 +1556,7 @@ def orders_get_by_ticket(ticket: int) -> dict[str, Any] | None:
     Returns:
         Optional[Dict[str, Any]]: Order information or None if not found.
     """
+    _ensure_initialized()
     order = mt5.orders_get(ticket=ticket)
     if order is None or len(order) == 0:
         logger.error(f"Failed to get order with ticket {ticket}, error code: {mt5.last_error()}")
@@ -1528,6 +1590,8 @@ def history_orders_get(
     Returns:
         List[HistoryOrder]: List of historical orders.
     """
+    _ensure_initialized()
+
     request = {}
     if symbol is not None:
         request["symbol"] = symbol
@@ -1585,6 +1649,8 @@ def history_deals_get(
     Returns:
         List[Deal]: List of historical deals.
     """
+    _ensure_initialized()
+
     request = {}
     if symbol is not None:
         request["symbol"] = symbol

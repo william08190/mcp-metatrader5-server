@@ -38,11 +38,14 @@ Or manually add to `claude_desktop_config.json`:
 
 ## Basic Workflow
 
-1. **Initialize the MT5 terminal**:
-   - Use the `initialize()` tool to connect to the MT5 terminal.
+1. **Start the MT5 terminal on the server host**:
+   - Tools auto-initialize or reattach to MT5 before use.
+   - If auto-detection is not enough, set `MT5_PATH` or `MT5_TERMINAL_PATH` in
+     the MCP server environment.
 
 2. **Log in to your trading account**:
-   - Use the `login(account, password, server)` tool to log in to your trading account.
+   - Use the `login(account, password, server)` tool only if the terminal is not
+     already logged in.
 
 3. **Access market data**:
    - Use tools like `get_symbols()`, `copy_rates_from_pos()`, etc. to access market data.
@@ -69,17 +72,16 @@ The server provides helpful resources:
 - `mt5://order_time_types` - Order time type constants
 - `mt5://trade_actions` - Trade action constants
 
-## Example: Connecting to MT5 and Getting Market Data
+## Example: Getting Market Data
 
 When using with Claude Desktop or other MCP clients, you can ask the AI assistant:
 
-> "Initialize MT5 with the default auto-detected terminal, then login with account 123456, password 'your_password', and server 'your_server'. After that, get the available symbols and show me recent price data for EURUSD on the 15-minute timeframe."
+> "Get the available symbols and show me recent price data for EURUSD on the 15-minute timeframe. If the terminal is not logged in, login with account 123456, password 'your_password', and server 'your_server'."
 
 The AI will use these tools:
-1. `initialize(path="")`
-2. `login(login=123456, password="your_password", server="your_server")`
-3. `get_symbols()`
-4. `copy_rates_from_pos(symbol="EURUSD", timeframe=15, start_pos=0, count=100)`
+1. `login(login=123456, password="your_password", server="your_server")` if needed
+2. `get_symbols()`
+3. `copy_rates_from_pos(symbol="EURUSD", timeframe=15, start_pos=0, count=100)`
 
 ## Example: Placing a Trade
 

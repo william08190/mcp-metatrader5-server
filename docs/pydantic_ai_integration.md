@@ -108,13 +108,6 @@ async def use_mt5_with_pydantic_ai():
             tools_result = await session.list_tools()
             print(f"Available tools: {[tool.name for tool in tools_result.tools]}")
             
-            # Call a tool - Initialize MT5
-            init_result = await session.call_tool(
-                "initialize",
-                arguments={"path": ""}
-            )
-            print(f"MT5 Initialization: {init_result.content}")
-            
             # Get account info using the agent
             result = await agent.run(
                 "Get my account information and summarize the balance and equity.",
@@ -172,7 +165,8 @@ trading_agent = Agent(
     system_prompt="""You are an expert trading analyst with access to MetaTrader 5 market data.
     
     Your responsibilities:
-    1. Initialize MetaTrader 5 first using the initialize tool
+    1. Call MT5 account, market-data, order, and history tools directly.
+       The MCP server auto-initializes or reattaches to the terminal.
     2. Analyze market data using technical indicators
     3. Identify key support and resistance levels
     4. Determine market trends (bullish, bearish, sideways)
@@ -186,7 +180,6 @@ trading_agent = Agent(
     - Recent price action
     
     Available tools from MT5:
-    - initialize: Initialize MT5 connection
     - copy_rates_from_pos: Get historical price data
     - get_symbol_info_tick: Get current price tick
     - get_account_info: Get account balance and info
@@ -211,13 +204,12 @@ async def run_trading_analysis():
             """Analyze the EURUSD market on the 1-hour timeframe.
             
             Steps to follow:
-            1. First initialize MetaTrader 5 with path: C:\\Program Files\\MetaTrader 5\\terminal64.exe
-            2. Get the last 100 bars of price data for EURUSD on 60-minute timeframe
-            3. Get the current price for EURUSD
-            4. Analyze the data to identify the trend
-            5. Find key support and resistance levels
-            6. Provide a trading recommendation with risk assessment
-            7. Finally, shutdown the MT5 connection
+            1. Get the last 100 bars of price data for EURUSD on 60-minute timeframe
+            2. Get the current price for EURUSD
+            3. Analyze the data to identify the trend
+            4. Find key support and resistance levels
+            5. Provide a trading recommendation with risk assessment
+            6. Finally, shutdown the MT5 connection
             
             Return your analysis in the structured format.
             """
@@ -418,11 +410,11 @@ class TradingBot:
         
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
-                # Initialize
+                # Initialize the MCP protocol session
                 await session.initialize()
                 await session.call_tool(
-                    "initialize",
-                    arguments={"path": self.mt5_path}
+                    "reconnect",
+                    arguments={}
                 )
                 await session.call_tool(
                     "login",
@@ -493,7 +485,7 @@ Properly manage the MCP session lifecycle:
 ```python
 async with stdio_client(server_params) as (read, write):
     async with ClientSession(read, write) as session:
-        # Initialize at start
+        # Initialize the MCP protocol session at start
         await session.initialize()
         
         try:
@@ -621,22 +613,10 @@ uvx --from mcp-metatrader5-server mt5mcp --help
 
 ### Issue: MT5 Connection Failed
 
-**Solution**: Try the default auto-detected terminal first. If that fails, ensure
-MT5 terminal is installed and pass the full path to `terminal64.exe`:
-
-```python
-# Try auto-detection first, then fallback paths
-paths = [
-    "",
-    r"C:\Program Files\MetaTrader 5\terminal64.exe",
-    r"C:\Program Files (x86)\MetaTrader 5\terminal64.exe",
-]
-
-for path in paths:
-    result = await session.call_tool("initialize", arguments={"path": path})
-    if not result.isError:
-        break
-```
+**Solution**: Ensure MT5 terminal is installed and running on the server host.
+If auto-detection is not enough, set `MT5_PATH` or `MT5_TERMINAL_PATH` in the
+MCP server environment. Avoid passing local terminal paths through model tool
+calls.
 
 ### Issue: Tool Calls Failing
 

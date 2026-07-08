@@ -94,7 +94,7 @@ Or manually configure `claude_desktop_config.json`:
 ## Available Tools
 
 ### Connection Management
-- `initialize(path)` - Initialize the MT5 terminal
+- `reconnect()` - Optional manual reconnect helper; most tools auto-initialize MT5
 - `login(login, password, server)` - Log in to a trading account
 - `shutdown()` - Close the connection to the MT5 terminal
 - `get_account_info()` - Get trading account information
@@ -139,7 +139,7 @@ The server provides helpful resources for AI assistants:
 
 Ask your AI assistant:
 
-> "Initialize MT5, login to my account, and show me the current price of EURUSD"
+> "Login to my account if needed, and show me the current price of EURUSD"
 
 > "Get the last 100 bars of GBPUSD on the 1-hour timeframe"
 

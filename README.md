@@ -156,7 +156,7 @@ Add this to your `claude_desktop_config.json` or whatever LLM config file:
 
 ### Connection Management
 
-- `initialize()`: Initialize the MT5 terminal
+- `reconnect()`: Optional manual reconnect helper; most tools auto-initialize MT5
 - `login(account, password, server)`: Log in to a trading account
 - `shutdown()`: Close the connection to the MT5 terminal
 
@@ -190,10 +190,7 @@ Add this to your `claude_desktop_config.json` or whatever LLM config file:
 ### Connecting and Getting Market Data
 
 ```python
-# Initialize MT5
-initialize()
-
-# Log in to your trading account
+# Optional: log in if the terminal is not already logged in
 login(account=123456, password="your_password", server="your_server")
 
 # Get available symbols
@@ -209,8 +206,7 @@ shutdown()
 ### Placing a Trade
 
 ```python
-# Initialize and log in
-initialize()
+# Optional: log in if the terminal is not already logged in
 login(account=123456, password="your_password", server="your_server")
 
 # Create an order request

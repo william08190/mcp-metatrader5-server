@@ -120,8 +120,8 @@ import pytest
 def test_mt5_connection():
     """Test actual MT5 connection."""
     # This test requires MT5 to be running
-    result = initialize(path="")
-    assert result is True
+    info = get_terminal_info()
+    assert info["connected"] is True
 ```
 
 ## Continuous Integration
