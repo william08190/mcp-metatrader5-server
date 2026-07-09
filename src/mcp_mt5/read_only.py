@@ -3,14 +3,48 @@
 import importlib
 import os
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from pydantic import Field
 
 from .main import READ_ONLY_ANNOTATIONS, READ_ONLY_META, SymbolInfo
 
 full = importlib.import_module("mcp_mt5.main")
+
+DateTimeUTC = Annotated[
+    datetime,
+    Field(
+        description=(
+            "ISO 8601 date-time string with an explicit timezone. Use UTC with "
+            "a trailing Z, for example 2026-07-09T01:00:00Z."
+        ),
+        examples=["2026-07-09T01:00:00Z"],
+    ),
+]
+
+TickFlags = Annotated[
+    Literal[-1, 1, 2],
+    Field(
+        description=(
+            "MT5 tick filter. Use -1 for all ticks, 1 for bid/ask quote-change "
+            "ticks, or 2 for trade ticks."
+        ),
+        examples=[-1],
+    ),
+]
+
+TimeframeMinutes = Annotated[
+    int,
+    Field(
+        description=(
+            "MT5 timeframe in minutes. Common values: 1=M1, 5=M5, 15=M15, "
+            "30=M30, 60=H1, 240=H4, 1440=D1, 10080=W1, 43200=MN1."
+        ),
+        examples=[60],
+    ),
+]
 
 mcp = FastMCP(
     "MetaTrader 5 Market Data MCP Server",
@@ -106,14 +140,15 @@ def get_symbol_info_tick(symbol: str) -> dict[str, Any]:
 
 @mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_rates_from_pos(
-    symbol: str, timeframe: int, start_pos: int, count: int
+    symbol: str, timeframe: TimeframeMinutes, start_pos: int, count: int
 ) -> list[dict[str, Any]]:
     """
     Get bars from a symbol and timeframe starting from a bar position.
 
     Args:
         symbol: Symbol name, e.g. "EURUSD", "GBPUSD".
-        timeframe: Timeframe in minutes, e.g. 1, 5, 15, 30, 60, 240, 1440.
+        timeframe: MT5 timeframe in minutes. Common values: 1=M1, 5=M5, 15=M15,
+            30=M30, 60=H1, 240=H4, 1440=D1, 10080=W1, 43200=MN1.
         start_pos: Starting position, where 0 is the most recent bar.
         count: Number of bars to retrieve.
 
@@ -125,15 +160,17 @@ def copy_rates_from_pos(
 
 @mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_rates_from_date(
-    symbol: str, timeframe: int, date_from: datetime, count: int
+    symbol: str, timeframe: TimeframeMinutes, date_from: DateTimeUTC, count: int
 ) -> list[dict[str, Any]]:
     """
     Get bars from a symbol and timeframe starting from a date.
 
     Args:
         symbol: Symbol name.
-        timeframe: Timeframe in minutes, e.g. 1, 5, 15, 30, 60, 240, 1440.
-        date_from: Start date for bar retrieval.
+        timeframe: MT5 timeframe in minutes. Common values: 1=M1, 5=M5, 15=M15,
+            30=M30, 60=H1, 240=H4, 1440=D1, 10080=W1, 43200=MN1.
+        date_from: Start date-time for bar retrieval. Use an ISO 8601 UTC
+            string with trailing Z, for example 2026-07-09T01:00:00Z.
         count: Number of bars to retrieve.
 
     Returns:
@@ -144,16 +181,22 @@ def copy_rates_from_date(
 
 @mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_rates_range(
-    symbol: str, timeframe: int, date_from: datetime, date_to: datetime
+    symbol: str,
+    timeframe: TimeframeMinutes,
+    date_from: DateTimeUTC,
+    date_to: DateTimeUTC,
 ) -> list[dict[str, Any]]:
     """
     Get bars from a symbol and timeframe within a date range.
 
     Args:
         symbol: Symbol name.
-        timeframe: Timeframe in minutes, e.g. 1, 5, 15, 30, 60, 240, 1440.
-        date_from: Start date for bar retrieval.
-        date_to: End date for bar retrieval.
+        timeframe: MT5 timeframe in minutes. Common values: 1=M1, 5=M5, 15=M15,
+            30=M30, 60=H1, 240=H4, 1440=D1, 10080=W1, 43200=MN1.
+        date_from: Start date-time for bar retrieval. Use an ISO 8601 UTC
+            string with trailing Z, for example 2026-07-09T01:00:00Z.
+        date_to: End date-time for bar retrieval. Use an ISO 8601 UTC string
+            with trailing Z, for example 2026-07-09T02:00:00Z.
 
     Returns:
         List[Dict[str, Any]]: JSON-serializable OHLCV bars.
@@ -163,16 +206,21 @@ def copy_rates_range(
 
 @mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_ticks_from_pos(
-    symbol: str, start_time: datetime, count: int, flags: int = full.mt5.COPY_TICKS_ALL
+    symbol: str,
+    start_time: DateTimeUTC,
+    count: int,
+    flags: TickFlags = full.mt5.COPY_TICKS_ALL,
 ) -> list[dict[str, Any]]:
     """
     Get ticks from a symbol starting from an initial time.
 
     Args:
         symbol: Symbol name.
-        start_time: Initial time for tick retrieval.
+        start_time: Initial date-time for tick retrieval. Use an ISO 8601 UTC
+            string with trailing Z, for example 2026-07-09T01:00:00Z.
         count: Number of ticks to retrieve.
-        flags: Type of requested ticks.
+        flags: MT5 tick filter. Use -1 for all ticks, 1 for bid/ask
+            quote-change ticks, or 2 for trade ticks.
 
     Returns:
         List[Dict[str, Any]]: JSON-serializable ticks.
@@ -182,16 +230,21 @@ def copy_ticks_from_pos(
 
 @mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_ticks_from_date(
-    symbol: str, date_from: datetime, count: int, flags: int = full.mt5.COPY_TICKS_ALL
+    symbol: str,
+    date_from: DateTimeUTC,
+    count: int,
+    flags: TickFlags = full.mt5.COPY_TICKS_ALL,
 ) -> list[dict[str, Any]]:
     """
     Get ticks from a symbol starting from a date.
 
     Args:
         symbol: Symbol name.
-        date_from: Start date for tick retrieval.
+        date_from: Start date-time for tick retrieval. Use an ISO 8601 UTC
+            string with trailing Z, for example 2026-07-09T01:00:00Z.
         count: Number of ticks to retrieve.
-        flags: Type of requested ticks.
+        flags: MT5 tick filter. Use -1 for all ticks, 1 for bid/ask
+            quote-change ticks, or 2 for trade ticks.
 
     Returns:
         List[Dict[str, Any]]: JSON-serializable ticks.
@@ -201,16 +254,22 @@ def copy_ticks_from_date(
 
 @mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_ticks_range(
-    symbol: str, date_from: datetime, date_to: datetime, flags: int = full.mt5.COPY_TICKS_ALL
+    symbol: str,
+    date_from: DateTimeUTC,
+    date_to: DateTimeUTC,
+    flags: TickFlags = full.mt5.COPY_TICKS_ALL,
 ) -> list[dict[str, Any]]:
     """
     Get ticks from a symbol within a date range.
 
     Args:
         symbol: Symbol name.
-        date_from: Start date for tick retrieval.
-        date_to: End date for tick retrieval.
-        flags: Type of requested ticks.
+        date_from: Start date-time for tick retrieval. Use an ISO 8601 UTC
+            string with trailing Z, for example 2026-07-09T01:00:00Z.
+        date_to: End date-time for tick retrieval. Use an ISO 8601 UTC string
+            with trailing Z, for example 2026-07-09T02:00:00Z.
+        flags: MT5 tick filter. Use -1 for all ticks, 1 for bid/ask
+            quote-change ticks, or 2 for trade ticks.
 
     Returns:
         List[Dict[str, Any]]: JSON-serializable ticks.

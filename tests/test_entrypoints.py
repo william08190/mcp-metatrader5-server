@@ -81,6 +81,40 @@ async def test_read_only_entrypoint_tools_have_chatgpt_safe_annotations():
 
 
 @pytest.mark.unit
+async def test_read_only_entrypoint_datetime_and_flags_schema_is_explicit():
+    async with Client(read_only_mcp) as client:
+        tools = _tools(await client.list_tools())
+
+    schemas_by_name = {
+        tool.name: tool.model_dump(by_alias=True)["inputSchema"] for tool in tools
+    }
+
+    for tool_name in (
+        "copy_rates_from_date",
+        "copy_rates_range",
+        "copy_ticks_from_pos",
+        "copy_ticks_from_date",
+        "copy_ticks_range",
+    ):
+        properties = schemas_by_name[tool_name]["properties"]
+        for parameter_name in ("date_from", "date_to", "start_time"):
+            if parameter_name not in properties:
+                continue
+            parameter_schema = properties[parameter_name]
+            assert parameter_schema["format"] == "date-time"
+            assert "ISO 8601" in parameter_schema["description"]
+            assert "timezone" in parameter_schema["description"]
+            assert "2026-07-09T01:00:00Z" in parameter_schema["examples"]
+
+    for tool_name in ("copy_ticks_from_pos", "copy_ticks_from_date", "copy_ticks_range"):
+        flags_schema = schemas_by_name[tool_name]["properties"]["flags"]
+        assert flags_schema["enum"] == [-1, 1, 2]
+        assert "-1 for all ticks" in flags_schema["description"]
+        assert "1 for bid/ask" in flags_schema["description"]
+        assert "2 for trade ticks" in flags_schema["description"]
+
+
+@pytest.mark.unit
 async def test_full_entrypoint_keeps_trading_tools_with_risk_annotations():
     async with Client(full_mcp) as client:
         tools = _tools(await client.list_tools())
