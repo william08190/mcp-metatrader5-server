@@ -38,6 +38,73 @@ mcp = FastMCP(
 )
 
 
+NOAUTH_SECURITY_SCHEMES = [{"type": "noauth"}]
+
+
+def _tool_meta(invoking: str, invoked: str, visibility: str = "public") -> dict[str, Any]:
+    """Return ChatGPT-compatible tool metadata."""
+    return {
+        "securitySchemes": NOAUTH_SECURITY_SCHEMES,
+        "openai/visibility": visibility,
+        "openai/toolInvocation/invoking": invoking,
+        "openai/toolInvocation/invoked": invoked,
+    }
+
+
+READ_ONLY_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+
+ACCOUNT_READ_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+
+TERMINAL_STATE_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+
+AUTH_ACTION_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+
+ORDER_CHECK_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+
+TRADING_ACTION_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+
+READ_ONLY_META = _tool_meta("Reading MT5 data...", "MT5 data ready")
+ACCOUNT_READ_META = _tool_meta("Reading MT5 account data...", "MT5 account data ready")
+TERMINAL_STATE_META = _tool_meta("Updating MT5 terminal state...", "MT5 terminal state updated")
+AUTH_ACTION_META = _tool_meta("Logging in to MT5...", "MT5 login finished", visibility="private")
+ORDER_CHECK_META = _tool_meta("Checking MT5 order...", "MT5 order check complete")
+TRADING_ACTION_META = _tool_meta(
+    "Sending MT5 trading request...",
+    "MT5 trading request complete",
+    visibility="private",
+)
+
+
 _MT5_PATH_ENV_VARS = ("MT5_PATH", "MT5_TERMINAL_PATH")
 
 
@@ -654,7 +721,7 @@ def initialize(path: str = "") -> bool:
     return _initialize_mt5(path=path)
 
 
-@mcp.tool()
+@mcp.tool(annotations=TERMINAL_STATE_ANNOTATIONS, meta=TERMINAL_STATE_META)
 def reconnect() -> bool:
     """
     Reconnect to the MetaTrader 5 terminal using server-side configuration.
@@ -670,7 +737,7 @@ def reconnect() -> bool:
 
 
 # Shutdown MetaTrader 5 connection
-@mcp.tool()
+@mcp.tool(annotations=TERMINAL_STATE_ANNOTATIONS, meta=TERMINAL_STATE_META)
 def shutdown() -> bool:
     """
     Shut down the connection to the MetaTrader 5 terminal.
@@ -684,7 +751,7 @@ def shutdown() -> bool:
 
 
 # Login to MetaTrader 5 account
-@mcp.tool()
+@mcp.tool(annotations=AUTH_ACTION_ANNOTATIONS, meta=AUTH_ACTION_META)
 def login(login: int, password: str, server: str) -> bool:
     """
     Log in to the MetaTrader 5 trading account.
@@ -711,7 +778,7 @@ def login(login: int, password: str, server: str) -> bool:
 
 
 # Get account information
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def get_account_info() -> AccountInfo:
     """
     Get information about the current trading account.
@@ -751,7 +818,7 @@ def get_account_info() -> AccountInfo:
 
 
 # Get terminal information
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_terminal_info() -> dict[str, Any]:
     """
     Get information about the MetaTrader 5 terminal.
@@ -770,7 +837,7 @@ def get_terminal_info() -> dict[str, Any]:
 
 
 # Get version information
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_version() -> dict[str, Any]:
     """
     Get the MetaTrader 5 version.
@@ -788,7 +855,7 @@ def get_version() -> dict[str, Any]:
 
 
 # Get symbols
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_symbols() -> list[str]:
     """
     Get all available symbols (financial instruments) from the MetaTrader 5 terminal.
@@ -806,7 +873,7 @@ def get_symbols() -> list[str]:
 
 
 # Get symbols by group
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_symbols_by_group(group: str) -> list[str]:
     """
     Get symbols that match a specific group or pattern.
@@ -827,7 +894,7 @@ def get_symbols_by_group(group: str) -> list[str]:
 
 
 # Get symbol information
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_symbol_info(symbol: str) -> SymbolInfo:
     """
     Get information about a specific symbol.
@@ -850,7 +917,7 @@ def get_symbol_info(symbol: str) -> SymbolInfo:
 
 
 # Get symbol tick information
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_symbol_info_tick(symbol: str) -> dict[str, Any]:
     """
     Get the latest tick data for a symbol.
@@ -886,7 +953,7 @@ def get_symbol_info_tick(symbol: str) -> dict[str, Any]:
 
 
 # Select symbol in Market Watch
-@mcp.tool()
+@mcp.tool(annotations=TERMINAL_STATE_ANNOTATIONS, meta=TERMINAL_STATE_META)
 def symbol_select(symbol: str, visible: bool = True) -> bool:
     """
     Select a symbol in the Market Watch window or remove a symbol from it.
@@ -917,7 +984,7 @@ def symbol_select(symbol: str, visible: bool = True) -> bool:
 
 
 # Copy rates from position
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_rates_from_pos(
     symbol: str, timeframe: int, start_pos: int, count: int
 ) -> list[dict[str, Any]]:
@@ -961,7 +1028,7 @@ def copy_rates_from_pos(
 
 
 # Copy rates from date
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_rates_from_date(
     symbol: str, timeframe: int, date_from: datetime, count: int
 ) -> list[dict[str, Any]]:
@@ -994,7 +1061,7 @@ def copy_rates_from_date(
 
 
 # Copy rates range
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_rates_range(
     symbol: str, timeframe: int, date_from: datetime, date_to: datetime
 ) -> list[dict[str, Any]]:
@@ -1027,7 +1094,7 @@ def copy_rates_range(
 
 
 # Copy ticks from position
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_ticks_from_pos(
     symbol: str, start_time: datetime, count: int, flags: int = mt5.COPY_TICKS_ALL
 ) -> list[dict[str, Any]]:
@@ -1061,7 +1128,7 @@ def copy_ticks_from_pos(
 
 
 # Copy ticks from date
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_ticks_from_date(
     symbol: str, date_from: datetime, count: int, flags: int = mt5.COPY_TICKS_ALL
 ) -> list[dict[str, Any]]:
@@ -1094,7 +1161,7 @@ def copy_ticks_from_date(
 
 
 # Copy ticks range
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def copy_ticks_range(
     symbol: str, date_from: datetime, date_to: datetime, flags: int = mt5.COPY_TICKS_ALL
 ) -> list[dict[str, Any]]:
@@ -1127,7 +1194,7 @@ def copy_ticks_range(
 
 
 # Get last error
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY_ANNOTATIONS, meta=READ_ONLY_META)
 def get_last_error() -> dict[str, Any]:
     """
     Get the last error code and description.
@@ -1218,7 +1285,7 @@ def get_tick_flags() -> str:
 
 
 # Send order
-@mcp.tool()
+@mcp.tool(annotations=TRADING_ACTION_ANNOTATIONS, meta=TRADING_ACTION_META)
 def order_send(request: OrderRequest) -> OrderResult:
     """
     Send an order to the trade server.
@@ -1307,7 +1374,7 @@ def order_send(request: OrderRequest) -> OrderResult:
 
 
 # Check order
-@mcp.tool()
+@mcp.tool(annotations=ORDER_CHECK_ANNOTATIONS, meta=ORDER_CHECK_META)
 def order_check(request: OrderRequest) -> dict[str, Any]:
     """
     Check if an order can be placed with the specified parameters.
@@ -1378,7 +1445,7 @@ def order_check(request: OrderRequest) -> dict[str, Any]:
 
 
 # Get positions
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def positions_get(symbol: str | None = None, group: str | None = None) -> list[Position]:
     """
     Get open positions.
@@ -1413,7 +1480,7 @@ def positions_get(symbol: str | None = None, group: str | None = None) -> list[P
 
 
 # Get position by ticket
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def positions_get_by_ticket(ticket: int) -> Position | None:
     """
     Get an open position by its ticket.
@@ -1436,7 +1503,7 @@ def positions_get_by_ticket(ticket: int) -> Position | None:
 
 
 # Close position by ticket
-@mcp.tool()
+@mcp.tool(annotations=TRADING_ACTION_ANNOTATIONS, meta=TRADING_ACTION_META)
 def close_position(
     ticket: int,
     deviation: int = 20,
@@ -1510,7 +1577,7 @@ def close_position(
 
 
 # Get orders
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def orders_get(symbol: str | None = None, group: str | None = None) -> list[dict[str, Any]]:
     """
     Get active orders.
@@ -1545,7 +1612,7 @@ def orders_get(symbol: str | None = None, group: str | None = None) -> list[dict
 
 
 # Get order by ticket
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def orders_get_by_ticket(ticket: int) -> dict[str, Any] | None:
     """
     Get an active order by its ticket.
@@ -1567,7 +1634,7 @@ def orders_get_by_ticket(ticket: int) -> dict[str, Any] | None:
 
 
 # Get history orders
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def history_orders_get(
     symbol: str | None = None,
     group: str | None = None,
@@ -1626,7 +1693,7 @@ def history_orders_get(
 
 
 # Get history deals
-@mcp.tool()
+@mcp.tool(annotations=ACCOUNT_READ_ANNOTATIONS, meta=ACCOUNT_READ_META)
 def history_deals_get(
     symbol: str | None = None,
     group: str | None = None,

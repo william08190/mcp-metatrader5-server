@@ -49,7 +49,8 @@ class TestConnectionManagement:
         async with Client(mcp) as client:
             tools = await client.list_tools()
 
-        tool_names = {tool.name for tool in tools.tools}
+        listed_tools = tools.tools if hasattr(tools, "tools") else tools
+        tool_names = {tool.name for tool in listed_tools}
         assert "initialize" not in tool_names
         assert "reconnect" in tool_names
 

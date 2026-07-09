@@ -17,6 +17,7 @@ A Model Context Protocol (MCP) server for MetaTrader 5, allowing AI assistants t
 - Place and manage trades
 - Analyze trading history
 - Integrate with AI assistants through the Model Context Protocol
+- Run separate full-access and read-only market-data MCP entrypoints
 
 ## Installation
 
@@ -24,6 +25,7 @@ A Model Context Protocol (MCP) server for MetaTrader 5, allowing AI assistants t
 
 ```bash
 uvx --from mcp-metatrader5-server mt5mcp
+uvx --from mcp-metatrader5-server mt5mcp-readonly
 ```
 
 ### From Source
@@ -33,42 +35,94 @@ git clone https://github.com/Qoyyuum/mcp-metatrader5-server.git
 cd mcp-metatrader5-server
 uv sync
 uv run mt5mcp
+uv run mt5mcp-readonly
 ```
 
 ## Requirements
 
 - **uv** (recommended) or pip
-- **Python 3.11 or higher**
+- **Python 3.12 or higher**
 - **MetaTrader 5 terminal** installed on Windows
 - **MetaTrader 5 account** (demo or real)
 
 ## Usage
 
+### Entrypoints
+
+This package provides two MCP entrypoints:
+
+- `mt5mcp` / `mt5mcp-full`: full MT5 control surface for trusted local clients. It includes login, account, positions, order checking, order sending, and position closing tools.
+- `mt5mcp-readonly`: read-only market-data surface for ChatGPT-style clients. It only exposes symbol, tick, rate, and version tools. It does not expose login, account, positions, orders, order checking, order sending, position closing, symbol selection, shutdown, or reconnect tools.
+
+The full entrypoint keeps existing behavior. The read-only entrypoint is the recommended ChatGPT app/MCP entrypoint because every exposed tool is annotated with ChatGPT-compatible read-only metadata.
+
 ### Quick Start
 
-The server runs in **stdio mode** by default for MCP clients like Claude Desktop:
+Both entrypoints run in **stdio mode** by default for MCP clients like Claude Desktop:
 
 ```bash
 uv run mt5mcp
+uv run mt5mcp-readonly
 ```
 
 ### Development Mode (HTTP)
 
-For testing with HTTP transport, create a `.env` file:
+For testing with HTTP transport or running both servers on a Windows VPS, create a `.env` file:
 
 ```env
+# Full-access server
 MT5_MCP_TRANSPORT=http
 MT5_MCP_HOST=127.0.0.1
 MT5_MCP_PORT=8000
+
+# Read-only market-data server
+MT5_READONLY_MCP_TRANSPORT=http
+MT5_READONLY_MCP_HOST=127.0.0.1
+MT5_READONLY_MCP_PORT=8001
 ```
 
-Then run:
+Then run each entrypoint in its own terminal or service:
 
 ```bash
 uv run mt5mcp
+uv run mt5mcp-readonly
 ```
 
-The server will start at http://127.0.0.1:8000
+The full server will start at http://127.0.0.1:8000 and the read-only server will start at http://127.0.0.1:8001.
+
+### Windows VPS Deployment
+
+Recommended layout:
+
+1. Install and log in to MetaTrader 5 on the Windows VPS.
+2. Add required symbols to MT5 Market Watch before using the read-only server. The read-only entrypoint intentionally does not expose `symbol_select`.
+3. Start `mt5mcp-readonly` for ChatGPT or other low-risk clients.
+4. Start `mt5mcp` or `mt5mcp-full` only for trusted clients that are allowed to access account and trading tools.
+5. If MT5 auto-detection is not reliable, set `MT5_PATH` or `MT5_TERMINAL_PATH` to the terminal executable path.
+
+Example PowerShell session:
+
+```powershell
+$env:MT5_PATH = "C:\Program Files\MetaTrader 5\terminal64.exe"
+
+$env:MT5_MCP_TRANSPORT = "http"
+$env:MT5_MCP_HOST = "127.0.0.1"
+$env:MT5_MCP_PORT = "8000"
+uv run mt5mcp-full
+```
+
+In a second PowerShell session:
+
+```powershell
+$env:MT5_PATH = "C:\Program Files\MetaTrader 5\terminal64.exe"
+
+$env:MT5_READONLY_MCP_TRANSPORT = "http"
+$env:MT5_READONLY_MCP_HOST = "127.0.0.1"
+$env:MT5_READONLY_MCP_PORT = "8001"
+uv run mt5mcp-readonly
+```
+
+For public ChatGPT access, put only the read-only server behind your HTTPS reverse proxy or tunnel. Keep the full-access server private or restricted to trusted client networks.
 
 ### Installing for MCP Clients
 
@@ -93,6 +147,23 @@ Add this configuration to your MCP client's config file:
 }
 ```
 
+For ChatGPT-style clients, use the read-only command:
+
+```json
+{
+  "mcpServers": {
+    "mcp-metatrader5-market-data": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Qoyyuum/mcp-metatrader5-server",
+        "mt5mcp-readonly"
+      ]
+    }
+  }
+}
+```
+
 #### Method 2: Using FastMCP Install (Recommended)
 
 ```bash
@@ -106,12 +177,14 @@ For MCP JSON format
 
 ```bash
 uv run fastmcp install mcp-json src/mcp_mt5/main.py
+uv run fastmcp install mcp-json src/mcp_mt5/read_only.py
 ```
 
 For Claude Desktop
 
 ```bash
 uv run fastmcp install claude-desktop src/mcp_mt5/main.py
+uv run fastmcp install claude-desktop src/mcp_mt5/read_only.py
 ```
 
 For Claude Code
@@ -131,6 +204,8 @@ For Gemini CLI
 ```bash
 uv run fastmcp install gemini-cli src/mcp_mt5/main.py
 ```
+
+Use `src/mcp_mt5/read_only.py` instead of `src/mcp_mt5/main.py` when installing the read-only entrypoint for any client.
 
 
 #### Method 3: Manual Configuration
@@ -152,15 +227,57 @@ Add this to your `claude_desktop_config.json` or whatever LLM config file:
 }
 ```
 
+Read-only manual configuration:
+
+```json
+{
+  "mcpServers": {
+    "mcp-metatrader5-market-data": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-metatrader5-server",
+        "mt5mcp-readonly"
+      ]
+    }
+  }
+}
+```
+
 ## API Reference
 
-### Connection Management
+### Read-only Market Data Entrypoint
+
+`mt5mcp-readonly` exposes only:
+
+- `get_version()`: Get MT5 version
+- `get_symbols()`: Get all available symbols
+- `get_symbols_by_group(group)`: Get symbols by group
+- `get_symbol_info(symbol)`: Get information about a specific symbol
+- `get_symbol_info_tick(symbol)`: Get the latest tick for a symbol already visible in Market Watch
+- `copy_rates_from_pos(symbol, timeframe, start_pos, count)`: Get bars from a specific position
+- `copy_rates_from_date(symbol, timeframe, date_from, count)`: Get bars from a specific date
+- `copy_rates_range(symbol, timeframe, date_from, date_to)`: Get bars within a date range
+- `copy_ticks_from_pos(symbol, start_time, count, flags)`: Get ticks from a specific time
+- `copy_ticks_from_date(symbol, date_from, count, flags)`: Get ticks from a specific date
+- `copy_ticks_range(symbol, date_from, date_to, flags)`: Get ticks within a date range
+
+It marks every exposed tool with read-only MCP annotations:
+
+- `readOnlyHint: true`
+- `destructiveHint: false`
+- `idempotentHint: true`
+- `openWorldHint: true`
+
+### Full Entrypoint
+
+#### Connection Management
 
 - `reconnect()`: Optional manual reconnect helper; most tools auto-initialize MT5
 - `login(account, password, server)`: Log in to a trading account
 - `shutdown()`: Close the connection to the MT5 terminal
 
-### Market Data Functions
+#### Market Data Functions
 
 - `get_symbols()`: Get all available symbols
 - `get_symbols_by_group(group)`: Get symbols by group
@@ -173,7 +290,7 @@ Add this to your `claude_desktop_config.json` or whatever LLM config file:
 - `copy_ticks_from_date(symbol, date_from, count)`: Get ticks from a specific date
 - `copy_ticks_range(symbol, date_from, date_to)`: Get ticks within a date range
 
-### Trading Functions
+#### Trading Functions
 
 - `order_send(request)`: Send an order to the trade server
 - `order_check(request)`: Check if an order can be placed with the specified parameters
@@ -262,6 +379,7 @@ mcp-metatrader5-server/
 │   └── mcp_mt5/
 │       ├── __init__.py      # Entry point with main()
 │       ├── main.py          # FastMCP server with all tools
+│       ├── read_only.py     # Read-only market-data MCP server
 │       └── test_client.py   # Test client for development
 ├── docs/
 │   ├── getting_started.md

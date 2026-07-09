@@ -2,7 +2,7 @@
 
 [![MseeP.ai Security Assessment Badge](https://mseep.net/pr/qoyyuum-mcp-metatrader5-server-badge.png)](https://mseep.ai/app/qoyyuum-mcp-metatrader5-server)
 [![PyPI version](https://badge.fury.io/py/mcp-metatrader5-server.svg)](https://badge.fury.io/py/mcp-metatrader5-server)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
 A Model Context Protocol (MCP) server for MetaTrader 5, allowing AI assistants to interact with the MetaTrader 5 platform for trading and market data analysis.
 
@@ -13,6 +13,7 @@ A Model Context Protocol (MCP) server for MetaTrader 5, allowing AI assistants t
 - 💹 **Place and manage trades** - Send orders, manage positions, and track history
 - 📈 **Analyze trading history** - Review past orders and deals
 - 🤖 **AI Integration** - Seamlessly integrate with AI assistants through MCP
+- 🔒 **Separate entrypoints** - Run a full-access server for trusted clients and a read-only market-data server for ChatGPT-style clients
 
 ## Quick Start
 
@@ -36,10 +37,16 @@ A Model Context Protocol (MCP) server for MetaTrader 5, allowing AI assistants t
 
 === "Stdio Mode (Default)"
 
-    For MCP clients like Claude Desktop:
+    For trusted MCP clients like Claude Desktop:
 
     ```bash
     uv run mt5mcp
+    ```
+
+    For ChatGPT-style read-only market data:
+
+    ```bash
+    uv run mt5mcp-readonly
     ```
 
 === "HTTP Mode (Development)"
@@ -47,16 +54,25 @@ A Model Context Protocol (MCP) server for MetaTrader 5, allowing AI assistants t
     Create a `.env` file:
 
     ```env
+    # Full-access server
     MT5_MCP_TRANSPORT=http
     MT5_MCP_HOST=127.0.0.1
     MT5_MCP_PORT=8000
+
+    # Read-only market-data server
+    MT5_READONLY_MCP_TRANSPORT=http
+    MT5_READONLY_MCP_HOST=127.0.0.1
+    MT5_READONLY_MCP_PORT=8001
     ```
 
-    Then run:
+    Then run each entrypoint in its own terminal or service:
 
     ```bash
     uv run mt5mcp
+    uv run mt5mcp-readonly
     ```
+
+The read-only entrypoint exposes only version, symbol, tick, rate, and tick-history tools. It does not expose login, account, position, order, trading, `symbol_select`, shutdown, or reconnect tools.
 
 ### Claude Desktop Setup
 
@@ -64,6 +80,12 @@ Install for Claude Desktop:
 
 ```bash
 uv run fastmcp install src/mcp_mt5/main.py
+```
+
+Install the read-only entrypoint instead:
+
+```bash
+uv run fastmcp install src/mcp_mt5/read_only.py
 ```
 
 Or manually configure `claude_desktop_config.json`:
@@ -87,13 +109,33 @@ Or manually configure `claude_desktop_config.json`:
 ## Requirements
 
 - **uv** (recommended) or pip
-- **Python 3.11 or higher**
+- **Python 3.12 or higher**
 - **MetaTrader 5 terminal** installed on Windows
 - **MetaTrader 5 account** (demo or real)
 
 ## Available Tools
 
-### Connection Management
+### Read-only Market Data Entrypoint
+
+`mt5mcp-readonly` exposes only:
+
+- `get_version()` - Get MT5 version
+- `get_symbols()` - Get all available symbols
+- `get_symbols_by_group(group)` - Get symbols by group
+- `get_symbol_info(symbol)` - Get symbol information
+- `get_symbol_info_tick(symbol)` - Get latest tick data for a symbol already visible in Market Watch
+- `copy_rates_from_pos()` - Get bars from position
+- `copy_rates_from_date()` - Get bars from date
+- `copy_rates_range()` - Get bars in date range
+- `copy_ticks_from_pos()` - Get ticks from a specific time
+- `copy_ticks_from_date()` - Get ticks from date
+- `copy_ticks_range()` - Get ticks in date range
+
+Every exposed read-only tool is annotated with `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: true`.
+
+### Full Entrypoint
+
+#### Connection Management
 - `reconnect()` - Optional manual reconnect helper; most tools auto-initialize MT5
 - `login(login, password, server)` - Log in to a trading account
 - `shutdown()` - Close the connection to the MT5 terminal
@@ -101,7 +143,7 @@ Or manually configure `claude_desktop_config.json`:
 - `get_terminal_info()` - Get terminal information
 - `get_version()` - Get MT5 version
 
-### Market Data
+#### Market Data
 - `get_symbols()` - Get all available symbols
 - `get_symbols_by_group(group)` - Get symbols by group
 - `get_symbol_info(symbol)` - Get symbol information
@@ -113,7 +155,7 @@ Or manually configure `claude_desktop_config.json`:
 - `copy_ticks_from_date()` - Get ticks from date
 - `copy_ticks_range()` - Get ticks in date range
 
-### Trading
+#### Trading
 - `order_send(request)` - Send an order
 - `order_check(request)` - Check order validity
 - `positions_get()` - Get open positions

@@ -1,10 +1,10 @@
 {
   "name": "mcp-metatrader5-server",
-  "version": "0.1.4",
+  "version": "0.1.8",
   "server": "src/mcp_mt5/main.py:mcp",
   "dependencies": [
-    "fastmcp==2.12.4",
-    "metatrader5==5.0.5260",
+    "fastmcp==3.4.2",
+    "metatrader5==5.0.5735",
     "pandas>=2.3.3",
     "pydantic>=2.11.9",
     "python-dotenv>=1.1.1"

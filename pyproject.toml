@@ -42,6 +42,8 @@ docs = [
 
 [project.scripts]
 mt5mcp = "mcp_mt5:main"
+mt5mcp-full = "mcp_mt5:main"
+mt5mcp-readonly = "mcp_mt5.read_only:main"
 
 [tool.hatchling]
 package-dir = {"" = "src"}

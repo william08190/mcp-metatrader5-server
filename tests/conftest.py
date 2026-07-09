@@ -1,9 +1,132 @@
 """Pytest configuration and fixtures for MCP MT5 tests."""
 
+import importlib
+import importlib.util
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import pytest
+
+_MT5_CONSTANTS = {
+    "TIMEFRAME_M1": 1,
+    "TIMEFRAME_M2": 2,
+    "TIMEFRAME_M3": 3,
+    "TIMEFRAME_M4": 4,
+    "TIMEFRAME_M5": 5,
+    "TIMEFRAME_M6": 6,
+    "TIMEFRAME_M10": 10,
+    "TIMEFRAME_M12": 12,
+    "TIMEFRAME_M15": 15,
+    "TIMEFRAME_M20": 20,
+    "TIMEFRAME_M30": 30,
+    "TIMEFRAME_H1": 16385,
+    "TIMEFRAME_H2": 16386,
+    "TIMEFRAME_H3": 16387,
+    "TIMEFRAME_H4": 16388,
+    "TIMEFRAME_H6": 16390,
+    "TIMEFRAME_H8": 16392,
+    "TIMEFRAME_H12": 16396,
+    "TIMEFRAME_D1": 16408,
+    "TIMEFRAME_W1": 32769,
+    "TIMEFRAME_MN1": 49153,
+    "COPY_TICKS_ALL": -1,
+    "COPY_TICKS_INFO": 1,
+    "COPY_TICKS_TRADE": 2,
+    "ORDER_TYPE_BUY": 0,
+    "ORDER_TYPE_SELL": 1,
+    "ORDER_TYPE_BUY_LIMIT": 2,
+    "ORDER_TYPE_SELL_LIMIT": 3,
+    "ORDER_TYPE_BUY_STOP": 4,
+    "ORDER_TYPE_SELL_STOP": 5,
+    "ORDER_TYPE_BUY_STOP_LIMIT": 6,
+    "ORDER_TYPE_SELL_STOP_LIMIT": 7,
+    "ORDER_TYPE_CLOSE_BY": 8,
+    "ORDER_FILLING_FOK": 0,
+    "ORDER_FILLING_IOC": 1,
+    "ORDER_FILLING_RETURN": 2,
+    "ORDER_TIME_GTC": 0,
+    "ORDER_TIME_DAY": 1,
+    "ORDER_TIME_SPECIFIED": 2,
+    "ORDER_TIME_SPECIFIED_DAY": 3,
+    "TRADE_ACTION_DEAL": 1,
+    "TRADE_ACTION_PENDING": 5,
+    "TRADE_ACTION_SLTP": 6,
+    "TRADE_ACTION_MODIFY": 7,
+    "TRADE_ACTION_REMOVE": 8,
+    "TRADE_ACTION_CLOSE_BY": 10,
+    "TRADE_RETCODE_REQUOTE": 10004,
+    "TRADE_RETCODE_REJECT": 10006,
+    "TRADE_RETCODE_CANCEL": 10007,
+    "TRADE_RETCODE_PLACED": 10008,
+    "TRADE_RETCODE_DONE": 10009,
+    "TRADE_RETCODE_DONE_PARTIAL": 10010,
+    "TRADE_RETCODE_ERROR": 10011,
+    "TRADE_RETCODE_TIMEOUT": 10012,
+    "TRADE_RETCODE_INVALID": 10013,
+    "TRADE_RETCODE_INVALID_VOLUME": 10014,
+    "TRADE_RETCODE_INVALID_PRICE": 10015,
+    "TRADE_RETCODE_INVALID_STOPS": 10016,
+    "TRADE_RETCODE_TRADE_DISABLED": 10017,
+    "TRADE_RETCODE_MARKET_CLOSED": 10018,
+    "TRADE_RETCODE_NO_MONEY": 10019,
+    "TRADE_RETCODE_PRICE_CHANGED": 10020,
+    "TRADE_RETCODE_PRICE_OFF": 10021,
+    "TRADE_RETCODE_INVALID_EXPIRATION": 10022,
+    "TRADE_RETCODE_ORDER_CHANGED": 10023,
+    "TRADE_RETCODE_TOO_MANY_REQUESTS": 10024,
+    "TRADE_RETCODE_NO_CHANGES": 10025,
+    "TRADE_RETCODE_SERVER_DISABLES_AT": 10026,
+    "TRADE_RETCODE_CLIENT_DISABLES_AT": 10027,
+    "TRADE_RETCODE_LOCKED": 10028,
+    "TRADE_RETCODE_FROZEN": 10029,
+    "TRADE_RETCODE_INVALID_FILL": 10030,
+    "RES_S_OK": 1,
+    "RES_E_FAIL": -1,
+    "RES_E_INVALID_PARAMS": -2,
+    "RES_E_NO_MEMORY": -3,
+    "RES_E_NOT_FOUND": -4,
+    "RES_E_INVALID_VERSION": -5,
+    "RES_E_AUTH_FAILED": -6,
+    "RES_E_UNSUPPORTED": -7,
+    "RES_E_AUTO_TRADING_DISABLED": -8,
+    "RES_E_INTERNAL_FAIL": -10000,
+}
+
+
+def _install_fake_mt5_module() -> None:
+    fake_mt5 = SimpleNamespace(**_MT5_CONSTANTS)
+    for name in (
+        "initialize",
+        "shutdown",
+        "login",
+        "last_error",
+        "version",
+        "terminal_info",
+        "account_info",
+        "symbols_get",
+        "symbol_info",
+        "symbol_info_tick",
+        "symbol_select",
+        "copy_rates_from_pos",
+        "copy_rates_from_date",
+        "copy_rates_range",
+        "copy_ticks_from",
+        "copy_ticks_range",
+        "order_send",
+        "order_check",
+        "positions_get",
+        "orders_get",
+        "history_orders_get",
+        "history_deals_get",
+    ):
+        setattr(fake_mt5, name, Mock(return_value=None))
+    fake_mt5.last_error.return_value = (0, "Success")
+    sys.modules["MetaTrader5"] = fake_mt5
+
+
+if "MetaTrader5" not in sys.modules and importlib.util.find_spec("MetaTrader5") is None:
+    _install_fake_mt5_module()
 
 
 @pytest.fixture(autouse=True)
@@ -12,7 +135,8 @@ def disable_auto_initialize_for_unit_tests(monkeypatch, request):
     if request.node.get_closest_marker("auto_initialize"):
         return
 
-    monkeypatch.setattr("mcp_mt5.main._ensure_initialized", lambda: None, raising=False)
+    mt5_main = importlib.import_module("mcp_mt5.main")
+    monkeypatch.setattr(mt5_main, "_ensure_initialized", lambda: None)
 
 
 @pytest.fixture
